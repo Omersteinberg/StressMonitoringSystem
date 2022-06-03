@@ -1,0 +1,28 @@
+from pulsesensor import Pulsesensor
+import time
+import RPi.GPIO as GPIO
+
+p = Pulsesensor()
+p.startAsyncBPM()
+
+//Set up buzzer
+BuzzerPin = 4
+GPIO.setwarnings(False)
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(BuzzerPin, GPIO.OUT)
+
+try:
+    while True:
+        bpm = p.BPM
+        if bpm > 0:
+            print("BPM: %d" % bpm) //Prints the BPM measured by the Pulse Sensor
+        else:
+            print("No Heartbeat found") //If BPM cannot be read, then return "No Heartbeat found"
+        time.sleep(1)
+        
+        if bpm > 100:
+            GPIO.output(BuzzerPin,GPIO.HIGH)
+        else:
+            GPIO.output(BuzzerPin, GPIO.LOW)  
+except:
+    p.stopAsyncBPM()
