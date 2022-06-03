@@ -1,0 +1,101 @@
+import time
+import threading
+from MCP3008 import MCP3008
+
+//define the connections to the MCP3008
+class Pulsesensor:
+    def __init__(self, channel = 0, bus = 0, device = 0):
+        self.channel = channel
+        self.BPM = 0
+        self.adc = MCP3008(bus, device)
+
+    def getBPMLoop(self):
+        # init variables
+        rate = [0] * 10         // array to hold last 10 IBI values
+        sampleCounter = 0       // created to detect pulse timing
+        lastBeatTime = 0        // Finds IBI
+        P = 512                 // Finds the peak in the pulse wave
+        T = 512                 // Finds the trough in the pulse wave
+        thresh = 525            // used to find instant moment of heart beat
+        amp = 100               // used to hold amplitude of pulse waveform
+        firstBeat = True        // ensures the BPM to begin with is reasonable
+        secondBeat = False      
+
+        IBI = 600               // int that holds the time interval between beats!
+        Pulse = False           // "True" when User's live heartbeat is detected. "False" when not a "live beat". 
+        lastTime = int(time.time()*1000)
+        
+        while not self.thread.stopped:
+            Signal = self.adc.read(self.channel)
+            currentTime = int(time.time()*1000)
+            
+            sampleCounter += currentTime - lastTime
+            lastTime = currentTime
+            
+            N = sampleCounter - lastBeatTime
+
+            // find the peak and trough of the pulse wave
+            if Signal < thresh and N > (IBI/5.0)*3:     
+                if Signal < T:                          
+                    T = Signal                          // keep track of lowest point in pulse wave 
+
+            if Signal > thresh and Signal > P:
+                P = Signal
+
+            // signal surges up in value every time there is a pulse
+            if N > 250:                                 
+                if Signal > thresh and Pulse == False and N > (IBI/5.0)*3:       
+                    Pulse = True                        // sets the Pulse flag when we think there is a pulse
+                    IBI = sampleCounter - lastBeatTime  // measure time between beats in mS
+                    lastBeatTime = sampleCounter        // keep track of time for next pulse
+
+                    if secondBeat:                      
+                        secondBeat = False;             
+                        for i in range(len(rate)):      
+                          rate[i] = IBI
+
+                    //ensures we can continue detecting the BPM
+                    if firstBeat:                       
+                        firstBeat = False;             
+                        secondBeat = True;              
+                        continue
+
+                      
+                    rate[:-1] = rate[1:]                
+                    rate[-1] = IBI                      
+                    runningTotal = sum(rate)            
+
+                    runningTotal /= len(rate)           //averages the IBI values 
+                    self.BPM = 60000/runningTotal       //how many beats can fit into a minute? (bpm)
+
+            if Signal < thresh and Pulse == True:        
+                Pulse = False                           // reset the Pulse flag so we can do it again
+                amp = P - T                             // get amplitude of the pulse wave
+                thresh = amp/2 + T                      
+                P = thresh                              
+                T = thresh
+
+            if N > 2500:                                
+                thresh = 512                           
+                P = 512                                 
+                T = 512                                 
+                lastBeatTime = sampleCounter                    
+                firstBeat = True                        
+                secondBeat = False                      
+                self.BPM = 0
+
+            time.sleep(0.005)
+            
+        
+    // Start getBPMLoop loop which saves the BPM in its variable
+    def startAsyncBPM(self):
+        self.thread = threading.Thread(target=self.getBPMLoop)
+        self.thread.stopped = False
+        self.thread.start()
+        return
+        
+    // Stop the loop
+    def stopAsyncBPM(self):
+        self.thread.stopped = True
+        self.BPM = 0
+        return
